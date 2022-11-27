@@ -44,7 +44,7 @@ big_Tab = [];
 SID = 1;
 
 figure; hold on;
-for task = 1:length(allTasks)
+for task = 3%1:length(allTasks)
 big_Tab = [];
 SID = 1;
 bg_rows = find(strcmp(sheet_data.CODE, allTasks{task}));
@@ -100,15 +100,15 @@ for ts = 1:length(shrewname)
     sessionIdx = unique(big_Tab.SessionID(big_Tab.ShrewID==ts));
     sessionNTrials = zeros(1,length(sessionIdx));
     sessionNTarg = zeros(1,length(sessionIdx));
-    disp([allTasks{task},', ',shrewname{ts},', NTarg = ',num2str(length(unique(big_Tab.T_Expt_ID(big_Tab.ShrewID==ts))))])
-    disp([allTasks{task},', ',shrewname{ts},', NDist = ',num2str(length(unique(big_Tab.D_Expt_ID(big_Tab.ShrewID==ts))))])
+    disp([allTasks{task},', ',shrewname{ts},', NTarg = ',num2str(length(unique(big_Tab.T_Expt_ID(big_Tab.ShrewID==ts & big_Tab.ctch == 0))))])
+    disp([allTasks{task},', ',shrewname{ts},', NDist = ',num2str(length(unique(big_Tab.D_Expt_ID(big_Tab.ShrewID==ts & big_Tab.ctch == 0))))])
     for ss = 1:length(sessionIdx)
         catchTrials = big_Tab.ctch == 1;
         noncatchTrials = big_Tab.ctch == 0;
         sessionAcc_Catch{ts}(ss) = mean(big_Tab.correct(big_Tab.SessionID==sessionIdx(ss) & catchTrials),'omitnan');
         sessionAcc_nonCatch{ts}(ss) = mean(big_Tab.correct(big_Tab.SessionID==sessionIdx(ss) & noncatchTrials),'omitnan');
         sessionNTrials(ss) = sum(big_Tab.SessionID==sessionIdx(ss));
-        sessionNTarg(ss) = length(unique(big_Tab.T_Expt_ID(big_Tab.SessionID==sessionIdx(ss))));
+        sessionNTarg(ss) = length(unique(big_Tab.T_Expt_ID(big_Tab.SessionID==sessionIdx(ss) & noncatchTrials)));
     end
     sessionAcc_Catch{ts} = sessionAcc_Catch{ts}(sessionNTrials>100 & sessionNTarg>=4);
     sessionAcc_nonCatch{ts} = sessionAcc_nonCatch{ts}(sessionNTrials>100 & sessionNTarg>=4);
@@ -139,18 +139,34 @@ ylim([0.45 1.05])
 yticks(0.5:0.1:1)
 ylabel('Proportion Correct','fontsize',15)
 
-%% Look at correlations of image pairs across shrews
+%% QQ plot for performance
+allTasks = {'Camel_v2_test_nn','Camel_novel_v2_test_nn','Camel_background_matrix','Camel_Rhino_test_nn'};
+%also add camel_novel_v2_test
+%only grab test images somehow and not catch trials
+%"test target/distractor" - not rewarded
+%"novel target/distractor" - rewarded
+
+% Determine which shrews to use
+shrewname={'Seymour','Dominic','Ryker'};
+shrewsymbol = {'o','o','o'};
+
+shrewcolor1 = [0.38,0.19,0.71;...
+    0.04,0.25,0.73;...
+    0.28,0.52,0.15];
+
+shrewcolor2 = [0.72,0.57,0.98;...
+    0.6,0.78,0.96;...
+    0.62,0.89,0.48];
+
+% set figure color to white
+set(0,'defaultfigurecolor',[1 1 1])
+
 % Initialize variables
 sessions = table('Size',[10,4],...
     'VariableNames',{'sessionID','shrewID','shrewname','date'},...
     'VariableTypes',{'double','double','string','string'});
 
 dataVars = {'T_Expt_ID','D_Expt_ID','correct','ctch'};
-allTasks = {'Camel_v2_test_nn','Camel_novel_v2_test_nn','Camel_background_matrix'};
-
-shrewname={'Seymour','Dominic','Ryker'};
-cmap = [107,181,107;170,154,192;233,172,114] / 255;
-
 big_Tab = [];
 SID = 1;
 
@@ -202,14 +218,158 @@ for i=1:height(bgTab)
     end
 end
 
+sessionAcc_Catch = cell(1,length(shrewname));
+sessionAcc_nonCatch = cell(1,length(shrewname));
+
+figure;
+shrewnum = 1;
+if ~isempty(big_Tab)
+for ts = 1:length(shrewname)
+    sessionIdx = unique(big_Tab.SessionID(big_Tab.ShrewID==ts));
+    sessionNTrials = zeros(1,length(sessionIdx));
+    sessionNTarg = zeros(1,length(sessionIdx));
+    for ss = 1:length(sessionIdx)
+        catchTrials = big_Tab.ctch == 1;
+        noncatchTrials = big_Tab.ctch == 0;
+        sessionAcc_Catch{ts}(ss) = mean(big_Tab.correct(big_Tab.SessionID==sessionIdx(ss) & catchTrials),'omitnan');
+        sessionAcc_nonCatch{ts}(ss) = mean(big_Tab.correct(big_Tab.SessionID==sessionIdx(ss) & noncatchTrials),'omitnan');
+        sessionNTrials(ss) = sum(big_Tab.SessionID==sessionIdx(ss));
+        sessionNTarg(ss) = length(unique(big_Tab.T_Expt_ID(big_Tab.SessionID==sessionIdx(ss) & noncatchTrials)));
+    end
+    sessionAcc_Catch{ts} = sessionAcc_Catch{ts}(sessionNTrials>100 & sessionNTarg>4);
+    sessionAcc_nonCatch{ts} = sessionAcc_nonCatch{ts}(sessionNTrials>100 & sessionNTarg>4);
+    
+    if ~isempty(sessionAcc_nonCatch{ts})
+        shrewnum = shrewnum+1;
+        subplot(length(shrewname)+1,2,2*ts-1);
+        h = qqplot(sessionAcc_nonCatch{ts});
+        h(1).Marker = 'o';
+        h(1).MarkerEdgeColor = shrewcolor1(ts,:);
+        h(1).LineWidth = 1;
+        h(3).Color = 'k';
+        title(shrewname{ts})
+        [~,p] = ttest(sessionAcc_nonCatch{ts},0.5);
+        disp([allTasks{task},' Non-catch, ',shrewname{ts},', p = ',num2str(p)])
+        
+        subplot(length(shrewname)+1,2,2*ts);
+        h = qqplot(sessionAcc_Catch{ts});
+        h(1).Marker = 'o';
+        h(1).MarkerEdgeColor = shrewcolor2(ts,:);
+        h(1).LineWidth = 1;
+        h(3).Color = 'k';
+        title(shrewname{ts})
+        [~,p] = ttest(sessionAcc_Catch{ts},0.5);
+        disp([allTasks{task},' Catch, ',shrewname{ts},', p = ',num2str(p)])
+    end
+end
+subplot(length(shrewname)+1,2,2*shrewnum-1);
+h = qqplot(cat(2,sessionAcc_nonCatch{:}));
+h(1).Marker = 'o';
+h(1).MarkerEdgeColor = [0.3 0.3 0.3];
+h(1).LineWidth = 1;
+h(3).Color = 'k';
+title('All Shrews')
+[~,p] = ttest(cat(2,sessionAcc_nonCatch{:}),0.5);
+disp(['All Shrews, ',shrewname{ts},', p = ',num2str(p)])
+
+subplot(length(shrewname)+1,2,2*shrewnum);
+h = qqplot(cat(2,sessionAcc_Catch{:}));
+h(1).Marker = 'o';
+h(1).MarkerEdgeColor = [0.6 0.6 0.6];
+h(1).LineWidth = 1;
+h(3).Color = 'k';
+title('All Shrews')
+[~,p] = ttest(cat(2,sessionAcc_Catch{:}),0.5);
+disp(['All Shrews, ',shrewname{ts},', p = ',num2str(p)])
+
+end
+end
+
+
+%% Look at correlations of image pairs across shrews
+% Initialize variables
+sessions = table('Size',[10,4],...
+    'VariableNames',{'sessionID','shrewID','shrewname','date'},...
+    'VariableTypes',{'double','double','string','string'});
+
+dataVars = {'T_Expt_ID','D_Expt_ID','correct','ctch'};
+allTasks = {'Camel_v2_test_nn','Camel_novel_v2_test_nn','Camel_background_matrix'};
+
+shrewname={'Seymour','Dominic','Ryker'};
+cmap = [107,181,107;170,154,192;233,172,114] / 255;
+
+big_Tab = [];
+SID = 1;
+
+for task = 1:length(allTasks)
+big_Tab = [];
+SID = 1;
+bg_rows = find(strcmp(sheet_data.CODE, allTasks{task}));
+
+% Just extracting the necessary columns, could also be adjusted if more
+% info is needed
+bgTab = sheet_data(bg_rows,contains(sheet_data.Properties.VariableNames,...
+    {'TREESHREW','DATE','CODE','TARGET_IDs','DIST_IDs','NOVELTARGET','NOVELDIST'}));
+
+% Load in corresponding files
+pathname = split(pwd,filesep);
+computer_path = [strjoin(pathname(1:3),'\'),filesep,'Box'];
+file_dir = [char(computer_path) filesep 'Tree Shrews' filesep 'Analysis' filesep 'Kell_mats' filesep];
+
+for i=1:height(bgTab)
+    if exist([file_dir char(bgTab.TREESHREW{i}(1:2)) datestr(bgTab.DATE(i),'yyyymmdd') '_op.mat'])==2
+        try
+        load([file_dir filesep char(bgTab.TREESHREW{i}(1:2)) datestr(bgTab.DATE(i),'yyyymmdd') '_op.mat'],'opTab');
+        end
+        if sum(contains(opTab.Properties.VariableNames,dataVars))==length(dataVars)
+        
+            shrewID = find(strcmp(shrewname,bgTab.TREESHREW{i}));
+
+            % this creates 'sessions' which has all the info needed for each
+            % session (day)
+            sessions.sessionID(SID) = SID;
+            sessions.shrewID(SID) = shrewID;
+            sessions.shrewname(SID) = bgTab.TREESHREW{i};
+            sessions.date(SID) = datestr(bgTab.DATE(i));
+            sessions.testtarg(SID) = bgTab.NOVELTARGET(i);
+            sessions.testdist(SID) = bgTab.NOVELDIST(i);
+
+            SessID = array2table([ones(height(opTab),1)*SID, ones(height(opTab),1)*shrewID, [1:height(opTab)]'],...
+                'VariableNames',{'SessionID','ShrewID','Trial_in_sess'});
+
+            temp_optab =[SessID opTab(:,contains(opTab.Properties.VariableNames,...
+                dataVars))];
+
+            % join temp_optab to big_tab
+            % this creates 'big_Tab' which has all the individual trials
+            big_Tab = [big_Tab; temp_optab];
+
+            clear temp_optab opTab novelTD
+
+            SID=SID+1; % increment session
+        end
+    end
+end
+
 nShrews = length(unique(big_Tab.ShrewID));
-nTarg = length(unique(big_Tab.T_Expt_ID));
-nDist = length(unique(big_Tab.D_Expt_ID));
 
 shrewID = unique(big_Tab.ShrewID);
-targID = unique(big_Tab.T_Expt_ID);
-distID = unique(big_Tab.D_Expt_ID);
+targID = unique(big_Tab.T_Expt_ID(big_Tab.ctch==0));
+distID = unique(big_Tab.D_Expt_ID(big_Tab.ctch==0));
 
+% testTargs = unique(sessions.testtarg);
+% testDist = unique(sessions.testdist);
+% 
+% targID(ismember(targID,testTargs)) = [];
+% distID(ismember(distID,testDist)) = [];
+
+nTarg = length(targID);
+nDist = length(distID);
+
+nanRow = [];
+nanCol = [];
+
+addpath('.\redblue')
 perfMat = {};
 for s = 1:nShrews
     perfMat{s} = nan(nTarg,nDist);
@@ -220,7 +380,62 @@ for s = 1:nShrews
             end
         end
     end
+    nanRow = [nanRow; find(all(isnan(perfMat{s}),2))];
+    nanCol = [nanCol find(all(isnan(perfMat{s}),1))];
 end
+
+nanRow = unique(nanRow);
+nanCol = unique(nanCol);
+
+newTargID = targID; newTargID(nanRow) = [];
+newDistID = distID; newDistID(nanCol) = [];
+
+for i = 1:nShrews
+perfMat{i}(nanRow,:) = [];perfMat{i}(:,nanCol) = [];
+
+figure();
+heatmap(newDistID,newTargID,round(perfMat{i},2))
+colormap(redblue);colorbar;caxis([0 1]);
+xlabel('Distractors (Wrenches)')
+ylabel('Targets (Camels)')
+title(shrewname{i})
+end
+
+
+% want to exclude stim pairs based on all trial counts so we can compare
+% heat maps across shrews
+% figure();
+% heatmap(distID(~nanCol),targID(~nanRow),perfMat{1}(~nanRow,~nanCol))
+% colormap(redblue);colorbar;caxis([0 1]);
+
+% just for test stim
+% nShrews = length(unique(big_Tab.ShrewID));
+% nTarg = length(unique(big_Tab.T_Expt_ID(isnan(big_Tab.ctch))));
+% nDist = length(unique(big_Tab.D_Expt_ID(isnan(big_Tab.ctch))));
+% 
+% shrewID = unique(big_Tab.ShrewID);
+% targID = unique(big_Tab.T_Expt_ID(isnan(big_Tab.ctch)));
+% distID = unique(big_Tab.D_Expt_ID(isnan(big_Tab.ctch)));
+% 
+% perfMat = {};
+% for s = 1:nShrews
+%     perfMat{s} = nan(nTarg,nDist);
+%     for tt = 1:nTarg
+%         for dd = 1:nDist
+%             if sum(big_Tab.ShrewID==shrewID(s) & big_Tab.T_Expt_ID==targID(tt) & big_Tab.D_Expt_ID==distID(dd)) >= 10
+%                 perfMat{s}(tt,dd) = mean(big_Tab.correct(big_Tab.ShrewID==shrewID(s) & big_Tab.T_Expt_ID==targID(tt) & big_Tab.D_Expt_ID==distID(dd)),'omitnan');
+%             end
+%         end
+%     end
+%     nanRow = ~all(isnan(perfMat{s}),2);
+%     nanCol = ~all(isnan(perfMat{s}),1);
+% end
+% 
+% addpath('.\redblue')
+% figure();
+% heatmap(distID(nanCol),targID(nanRow),perfMat{1}(nanRow,nanCol))
+% colormap(redblue);colorbar;caxis([0 1]);
+
 
 
 if nShrews==3
@@ -343,7 +558,7 @@ bg_rows = find(strcmp(sheet_data.CODE, allTasks{task}));
 % Just extracting the necessary columns, could also be adjusted if more
 % info is needed
 bgTab = sheet_data(bg_rows,contains(sheet_data.Properties.VariableNames,...
-    {'TREESHREW','DATE','CODE','TARGET_IDs','DIST_IDs','TESTTARGETS'}));
+    {'TREESHREW','DATE','CODE','TARGET_IDs','DIST_IDs','NOVELTARGET','NOVELDIST'}));
 
 % Load in corresponding files
 pathname = split(pwd,filesep);
@@ -365,6 +580,8 @@ for i=1:height(bgTab)
             sessions.shrewID(SID) = shrewID;
             sessions.shrewname(SID) = bgTab.TREESHREW{i};
             sessions.date(SID) = datestr(bgTab.DATE(i));
+            sessions.testtarg(SID) = bgTab.NOVELTARGET(i);
+            sessions.testdist(SID) = bgTab.NOVELDIST(i);
 
             SessID = array2table([ones(height(opTab),1)*SID, ones(height(opTab),1)*shrewID, [1:height(opTab)]'],...
                 'VariableNames',{'SessionID','ShrewID','Trial_in_sess'});
@@ -384,12 +601,19 @@ for i=1:height(bgTab)
 end
 
 nShrews = length(unique(big_Tab.ShrewID));
-nTarg = length(unique(big_Tab.T_Expt_ID));
-nDist = length(unique(big_Tab.D_Expt_ID));
 
 shrewID = unique(big_Tab.ShrewID);
-targID = unique(big_Tab.T_Expt_ID);
-distID = unique(big_Tab.D_Expt_ID);
+targID = unique(big_Tab.T_Expt_ID(big_Tab.ctch==0));
+distID = unique(big_Tab.D_Expt_ID(big_Tab.ctch==0));
+
+testTargs = unique(sessions.testtarg);
+testDist = unique(sessions.testdist);
+
+targID(ismember(targID,testTargs)) = [];
+distID(ismember(distID,testDist)) = [];
+
+nTarg = length(targID);
+nDist = length(distID);
 
 perfMat = {};
 for s = 1:nShrews
